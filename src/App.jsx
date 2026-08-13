@@ -162,7 +162,6 @@ function AddItemForm({ onAdd }) {
 
 function LuggageSection({ luggage, onUpdate, onDelete, removable }) {
   const Icon = luggageIcon(luggage.type);
-  const totalQty = luggage.items.reduce((s, i) => s + i.qty, 0);
   const totalCount = luggage.items.length;
   const packedCount = luggage.items.filter((i) => i.packed).length;
 
@@ -194,35 +193,6 @@ function LuggageSection({ luggage, onUpdate, onDelete, removable }) {
   );
 }
 
-function PersonTag({ person, active, onSelect, onRename, onDelete, removable }) {
-  const [editing, setEditing] = useState(false);
-  return (
-    <div style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
-      <div style={{ width: 1, height: 12, background: "var(--line)" }} />
-      <div
-        onClick={onSelect}
-        style={{
-          position: "relative", cursor: "pointer", background: active ? "var(--mustard)" : "var(--card)",
-          border: `1.5px solid var(--ink)`, borderRadius: "4px 10px 10px 4px", padding: "8px 14px 8px 22px",
-          display: "flex", alignItems: "center", gap: 8, boxShadow: active ? "3px 3px 0 var(--ink)" : "2px 2px 0 var(--line)"
-        }}
-      >
-        {editing ? (
-          <input
-            autoFocus value={person.name} onChange={(e) => onRename(e.target.value)} onBlur={() => setEditing(false)}
-            onKeyDown={(e) => e.key === "Enter" && setEditing(false)} onClick={(e) => e.stopPropagation()}
-            style={{ width: 80, border: "none", outline: "none", background: "transparent", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}
-          />
-        ) : (
-          <span style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{person.name}</span>
-        )}
-        <Pencil size={12} style={{ opacity: 0.5 }} onClick={(e) => { e.stopPropagation(); setEditing(true); }} />
-        {removable && <X size={13} style={{ opacity: 0.55 }} onClick={(e) => { e.stopPropagation(); onDelete(); }} />}
-      </div>
-    </div>
-  );
-}
-
 export default function PackingListApp() {
   const [tripCode, setTripCode] = useState("wspolna-podroz");
   const [codeInput, setCodeInput] = useState("wspolna-podroz");
@@ -236,7 +206,6 @@ export default function PackingListApp() {
   const saveTimeout = useRef(null);
   const skipNextSave = useRef(false);
 
-  // Pobieranie danych z Netlify Blobs przy zmianie kodu podróży
   useEffect(() => {
     let isMounted = true;
     setLoading(true);
@@ -271,7 +240,6 @@ export default function PackingListApp() {
     return () => { isMounted = false; };
   }, [tripCode]);
 
-  // Automatyczny zapis do Netlify Blobs po zmianach w danych
   useEffect(() => {
     if (!data) return;
     if (skipNextSave.current) {
@@ -355,15 +323,50 @@ export default function PackingListApp() {
         {!loading && data && (
           <>
             <div style={{ display: "flex", alignItems: "flex-start", gap: 18, flexWrap: "wrap", marginBottom: 26 }}>
-              {data.people.map((p, i) => (
-                <PersonTag
-                  key={p.id} person={p} active={p.id === data.activePersonId}
-                  onSelect={() => update((d) => ({ ...d, activePersonId: p.id }))}
-                  onRename={(name) => update((d) => ({ ...d, people: d.people.map(item => item.id === p.id ? { ...item, name } : item)) })}
-                  onDelete={() => update((d) => ({ ...d, people: d.people.filter(item => item.id !== p.id), activePersonId: d.activePersonId === p.id ? d.people[0].id : d.activePersonId }))}
-                  removable={data.people.length > 1}
-                />
-              ))}
+              {data.people.map((p) => {
+                const [editing, setEditing] = useState(false);
+                const active = p.id === data.activePersonId;
+                return (
+                  <div key={p.id} style={{ display: "flex", flexDirection: "column", alignItems: "center", flexShrink: 0 }}>
+                    <div style={{ width: 1, height: 12, background: "var(--line)" }} />
+                    <div
+                      onClick={() => update((d) => ({ ...d, activePersonId: p.id }))}
+                      style={{
+                        position: "relative", cursor: "pointer", background: active ? "var(--mustard)" : "var(--card)",
+                        border: `1.5px solid var(--ink)`, borderRadius: "4px 10px 10px 4px", padding: "8px 14px 8px 22px",
+                        display: "flex", alignItems: "center", gap: 8, boxShadow: active ? "3px 3px 0 var(--ink)" : "2px 2px 0 var(--line)"
+                      }}
+                    >
+                      {editing ? (
+                        <input
+                          autoFocus value={p.name}
+                          onChange={(e) => {
+                            const name = e.target.value;
+                            update((d) => ({ ...d, people: d.people.map(item => item.id === p.id ? { ...item, name } : item) }));
+                          }}
+                          onBlur={() => setEditing(false)}
+                          onKeyDown={(e) => e.key === "Enter" && setEditing(false)}
+                          onClick={(e) => e.stopPropagation()}
+                          style={{ width: 80, border: "none", outline: "none", background: "transparent", fontWeight: 700, fontSize: 14, color: "var(--ink)" }}
+                        />
+                      ) : (
+                        <span style={{ fontWeight: 700, fontSize: 14, color: "var(--ink)" }}>{p.name}</span>
+                      )}
+                      <Pencil size={12} style={{ opacity: 0.5 }} onClick={(e) => { e.stopPropagation(); setEditing(true); }} />
+                      {data.people.length > 1 && (
+                        <X size={13} style={{ opacity: 0.55 }} onClick={(e) => {
+                          e.stopPropagation();
+                          update((d) => ({
+                            ...d,
+                            people: d.people.filter(item => item.id !== p.id),
+                            activePersonId: d.activePersonId === p.id ? d.people[0].id : d.activePersonId
+                          }));
+                        }} />
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
               <button
                 onClick={() => update((d) => { const p = makePerson(`Osoba ${d.people.length + 1}`); return { ...d, people: [...d.people, p], activePersonId: p.id }; })}
                 style={{ border: "1.5px dashed var(--ink)", borderRadius: "4px 10px 10px 4px", padding: "8px 14px", background: "transparent", color: "var(--ink)", fontWeight: 700, fontSize: 14, cursor: "pointer", marginTop: 12, display: "flex", alignItems: "center", gap: 6 }}
